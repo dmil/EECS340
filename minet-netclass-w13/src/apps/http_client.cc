@@ -51,14 +51,23 @@ int main(int argc, char * argv[]) {
     }
 
     /* create socket */
-
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1)
+        return sock;
     // Do DNS lookup
-    /* Hint: use gethostbyname() */
-
+    site = gethostbyname(server_name);
+    if (site == NULL) {
+        close(sock);
+        return -1;}
     /* set address */
-
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(server_port); //the reverse byte stuff
+    sa.sin_addr.s_addr = * (unsigned long *)site->h_addr_list[0];
     /* connect socket */
-    
+    if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
+        close(sock);
+        return -1;}
     /* send request */
 
     /* wait till socket can be read */
