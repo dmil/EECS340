@@ -217,9 +217,10 @@ int handle_connection(int sock2)
   }
 
   /* close socket and free space */
-  free(headers);
-  free(endheaders);
-  free(bptr); 
+  //free(headers);
+  //free(endheaders);
+  //free(bptr); 
+  close(fd);
   minet_close(sock2);
   if (ok)
     return 0;
