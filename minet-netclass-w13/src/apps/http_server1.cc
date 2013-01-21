@@ -75,6 +75,12 @@ int main(int argc,char *argv[])
   while(1)
   {
     /* handle connections */
+    sock2 = minet_accept(sock,&sa2);
+    if (sock2 < 0)
+    {
+      minet_perror("Failed to accept connection!\n");
+      continue;//try again
+    }
     rc = handle_connection(sock2);
   }
 }
@@ -102,25 +108,119 @@ int handle_connection(int sock2)
   bool ok=true;
 
   /* first read loop -- get request and headers*/
-
+  endheaders = "\r\n\r\n";
+  memset(buf, 0, sizeof(buf));
+  while ((rc = minet_read(sock2,buf,BUFSIZE)) > 0)
+  {
+    buf[rc] = '\0';
+    if (strtok(buf, endheaders) != NULL) //valid header
+    {
+      headers = buf;
+      break;
+    }
+  }
+  if (rc < 0)
+  {
+      minet_perror("Failed to read client request!\n");
+      minet_close(sock2);
+      return -1;
+  }
   /* parse request to get file name */
   /* Assumption: this is a GET request and filename contains no spaces*/
-
-    /* try opening the file */
-
+  bptr = strtok(buf, " ");
+  if ( (strcmp(bptr, "GET") == 0) || 
+       (strcmp(bptr, "HEAD") == 0) ||
+       (strcmp(bptr, "DELETE") == 0) ||
+       (strcmp(bptr, "PUT") == 0) ||
+       (strcmp(bptr, "POST") == 0) ||
+       (strcmp(bptr, "PATCH") == 0) ||
+       (strcmp(bptr, "OPTIONS") == 0))
+  {
+      bptr = strtok(NULL, " "); // get the filename after request
+      if (bptr[0] == '/')
+         bptr += 1; //move pointer after the '/'
+      else if (strlen(bptr) > FILENAMESIZE)
+      {
+         fprintf(stderr, "Not a valid filename!\n");
+         minet_close(sock2);
+         return -1;
+      }
+  }
+  else
+  {
+      minet_perror("Not a valid request!\n");
+      minet_close(sock2);
+      return -1;
+  } 
+  strcpy(filename, bptr);
+  /* try opening the file */
+  fd = open(filename,O_RDWR);
+  if (fd < 0)
+  {
+    ok = false;
+    fprintf(stderr, "Failed to open file!\n");
+  }
+  else
+    ok = true;
   /* send response */
   if (ok)
   {
     /* send headers */
-
+    rc = stat(filename,&filestat);
+    if (rc < 0)
+    {
+      fprintf(stderr, "Failed to get file stat!\n");
+      minet_close(sock2);
+      return -1;
+    }
+    sprintf(ok_response,ok_response_f,filestat.st_size);
+    rc = writenbytes(sock2,ok_response,strlen(ok_response));
+    if (rc < 0)
+    {
+      minet_perror("Failed to send response!\n");
+      minet_close(sock2);
+      return -1;
+    }
     /* send file */
+    datalen=0;
+    while ((rc = minet_read(fd,buf,BUFSIZE)) != 0)
+    {
+      if( datalen == filestat.st_size ) break; //send required file  
+      else if (rc < 0)
+      {
+	minet_perror("Failed to buffering requested file!\n");
+	ok = false;
+        break;
+      }
+      else
+      {
+	rc = writenbytes(sock2, buf, rc);
+        datalen += rc; //accumulate how much required data already written
+	if (rc < 0)
+        {
+	  minet_perror("Failed to send file!\n");
+	  minet_close(sock2);
+	  return -1;
+	}
+      }
+    }
   }
   else // send error response
   {
+    rc = writenbytes(sock2,notok_response,strlen(notok_response));
+    if (rc < 0)
+    {
+      minet_perror("Failed to send error response!\n");
+      minet_close(sock2);
+      return -1;
+    }
   }
 
   /* close socket and free space */
-
+  free(headers);
+  free(endheaders);
+  free(bptr); 
+  minet_close(sock2);
   if (ok)
     return 0;
   else
