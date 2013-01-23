@@ -91,11 +91,16 @@ int main(int argc, char * argv[]) {
 	exit(-1);
 	} 
     /* wait till socket can be read */
-    FD_CLR(sock, &set);
-    FD_ISSET(sock, &set);
-    FD_ZERO(&set);
-    FD_SET(sock, &set);
-    minet_select(sock+1, &set, 0, 0, &timeout);
+    //FD_CLR(sock, &set);  //remove fd from the set
+    //FD_ISSET(sock, &set);
+    FD_ZERO(&set); //clears a file descriptor set
+    FD_SET(sock, &set); //adds fd to the set
+    if(FD_ISSET(sock, &set) == 0) {
+       fprintf(stderr, "Failed to add sock to the set!\n");
+       minet_close(sock);
+       exit(-1);
+    }
+    minet_select(sock+1, &set, 0, 0, &timeout); //numfds, readfds, writefds, exception, timeout
     //select(1, &set, NULL, NULL, &timeout);
     /* Hint: use select(), and ignore timeout for now. */
     
@@ -182,14 +187,15 @@ int write_n_bytes(int fd, char * buf, int count) {
 
 char *build_request_line(char *host, char *page)
 {
-    char *query;
-    char *getpage = page;
-    char *tpl = "GET /%s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n";
-    if(getpage[0] == '/'){
-      getpage = getpage + 1;
-    }
-    // -5 is to consider the %s %s %s in tpl and the ending \0
-    query = (char *)malloc(strlen(host)+strlen(getpage)+strlen(USERAGENT)+strlen(tpl)-5);
-    sprintf(query, tpl, getpage, host, USERAGENT);
-    return query;
+  char *query;
+  char *getpage = page;
+  char *tpl = "GET /%s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n";
+  if(getpage[0] == '/'){
+    getpage = getpage + 1;
+    //fprintf(stderr,"Removing leading \"/\", converting %s to %s\n", page, getpage);
+  }
+  // -5 is to consider the %s %s %s in tpl and the ending \0
+  query = (char *)malloc(strlen(host)+strlen(getpage)+strlen(USERAGENT)+strlen(tpl)-5);
+  sprintf(query, tpl, getpage, host, USERAGENT);
+  return query;
 }
