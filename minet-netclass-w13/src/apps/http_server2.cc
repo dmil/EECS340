@@ -6,6 +6,7 @@
 
 #define BUFSIZE 1024
 #define FILENAMESIZE 100
+#define BACKLOG 10
 
 int handle_connection(int);
 int writenbytes(int,char *,int);
@@ -69,29 +70,60 @@ int main(int argc,char *argv[])
      exit(-1);
   }
   /* start listening */
-  rc = minet_listen(sock,5);
+  rc = minet_listen(sock,BACKLOG);
   if (rc < 0)
   {
      minet_perror("Failed to start listening!\n");
      exit(-1);
   }
+ 
+  maxfd = sock;
+  FD_ZERO(&readlist); //clean up readlist
+  if (FD_SET(sock, &connections) == 0)
+  {
+     minet_perror("Failed to add sock to connection set!\n");
+     exit(-1);
+  } 
   /* connection handling loop */
   while(1)
   {
     /* create read list */
-
+    readlist = connections;
     /* do a select */
-
+    if (minet_select(maxfd+1, &readlist, 0, 0, 0) < 0)
+    {
+      minet_perror("Failed to perform select!\n");
+    }
     /* process sockets that are ready */
-
+    for(i=0; i< maxfd+1; i++)
+    {
+      if(FD_ISSET(i, &readlist))
+      {
       /* for the accept socket, add accepted connection to connections */
-      if (i == sock)
-      {
+        if (i == sock)
+        {
+          sock2 = minet_accept(sock, &sa);
+          if (sock2 < 0)
+          {
+            minet_perror("Failed to accept connection\n");
+            continue;
+          }
+          else
+          { 
+            FD_SET(sock2, &connections); //add selectfd to connection set
+            if (sock2 > maxfd)
+            { 
+               maxfd=sock2;
+            }
+          }
+        }
+        else /* for a connection socket, handle the connection */
+        {
+	  rc = handle_connection(i);
+          FD_CLR(i, &connections);
+        }
       }
-      else /* for a connection socket, handle the connection */
-      {
-	rc = handle_connection(i);
-      }
+    }
   }
 }
 
