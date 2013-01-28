@@ -44,41 +44,42 @@ int main(int argc, char * argv[]) {
 
     /* initialize minet */
     if (toupper(*(argv[1])) == 'K') { 
-	minet_init(MINET_KERNEL);
+      minet_init(MINET_KERNEL);
     } else if (toupper(*(argv[1])) == 'U') { 
-	minet_init(MINET_USER);
+      minet_init(MINET_USER);
     } else {
-	fprintf(stderr, "First argument must be k or u\n");
-	exit(-1);
+      fprintf(stderr, "First argument must be k or u\n");
+      exit(-1);
     }
 
     /* create socket */
-    sock = minet_socket(SOCK_STREAM);//sock = socket(AF_INET, SOCK_STREAM, 0);
+    sock = minet_socket(SOCK_STREAM);
     if (sock == -1) {
         fprintf(stderr, "Failed to create minet socket!\n");
         exit(-1);
     }
+
     // Do DNS lookup
     site = gethostbyname(server_name);
     if (site == NULL) {
-	fprintf(stderr, "Failed to resolve hostname!\n");
-	minet_close(sock);//close(sock);
-	exit(-1);//return -1;
-    }
+      fprintf(stderr, "Failed to resolve hostname!\n");
+      minet_close(sock);
+      exit(-1);    
+      }
+
     /* set address */
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
     sa.sin_port = htons(server_port); //the reverse byte stuff
     sa.sin_addr.s_addr = * (unsigned long *)site->h_addr_list[0];
-    /* connect socket */
+   
+   /* connect socket */
     if (minet_connect(sock, (struct sockaddr_in *) &sa) != 0) {
-	fprintf(stderr, "Failed to connect to socket!\n");
-        minet_close(sock);
-        exit(-1);
-    } 
-    /*if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
-	close(sock);
-	return -1;}*/
+      fprintf(stderr, "Failed to connect to socket!\n");
+      minet_close(sock);
+      exit(-1);
+    }
+
     /* send request */
     req = build_request_line(server_name,server_path);
     datalen = strlen(req)+1;
@@ -86,10 +87,11 @@ int main(int argc, char * argv[]) {
     //printf("build up request: %d", rc);
     rc = minet_write(sock, req, datalen);
     if(rc < 0) {
-	fprintf(stderr, "Failed to send request!\n");
-	minet_close(sock);
-	exit(-1);
-	} 
+      fprintf(stderr, "Failed to send request!\n");
+      minet_close(sock);
+      exit(-1);
+      } 
+
     /* wait till socket can be read */
     //FD_CLR(sock, &set);  //remove fd from the set
     //FD_ISSET(sock, &set);
@@ -100,8 +102,14 @@ int main(int argc, char * argv[]) {
        minet_close(sock);
        exit(-1);
     }
-    minet_select(sock+1, &set, 0, 0, &timeout); //numfds, readfds, writefds, exception, timeout
+    
+    rc = minet_select(sock+1, &set, 0, 0, &timeout); //numfds, readfds, writefds, exception, timeout
     //select(1, &set, NULL, NULL, &timeout);
+    if(rc<0){
+      fprintf(stderr, "Failed to select!\n");
+      minet_close(sock);
+      exit(-1);
+    }
     /* Hint: use select(), and ignore timeout for now. */
     
     /* first read loop -- read headers */
@@ -111,26 +119,28 @@ int main(int argc, char * argv[]) {
     endheaders = "\r\n\r\n";
     string::size_type pos;
     while((rc = minet_read(sock, buf, BUFSIZE)) > 0) {
-	buf[rc] = '\0';
-	response = response + (string)buf;
-	if((pos= response.find(endheaders,0)) != string::npos) {
-	   header_text = response.substr(0,pos);
-	   response = response.substr(pos + 4);
+      buf[rc] = '\0';
+      response = response + (string)buf;
+      if((pos= response.find(endheaders,0)) != string::npos) {
+      	   header_text = response.substr(0,pos);
+           response = response.substr(pos + 4);
 	   break;
 	}
     }
 
+
     /* examine return code */   
     string status = header_text.substr(header_text.find(" ") + 1);
     status = status.substr(0, status.find(" "));
+
     //Skip "HTTP/1.0"
     //remove the '\0'
     //Normal reply has return code 200
     if (status == "200") {
-        ok = true;
+      ok = true;
     }
-    else {
-	ok = false;
+    else {      
+      ok = false;
     }
 
     /* print first part of response */
@@ -140,7 +150,9 @@ int main(int argc, char * argv[]) {
     /* second read loop -- print out the rest of the response */
     while ((rc = minet_read(sock, buf, BUFSIZE)) > 0) {
         buf[rc] = '\0';
-      if(ok) {        													    					      fprintf(wheretoprint, buf);            													    		  }
+      if(ok) {        													    					      
+        fprintf(wheretoprint, buf);            													    		  
+      }
       else { 
         fprintf(stderr, buf);
       }
@@ -164,9 +176,9 @@ int main(int argc, char * argv[]) {
     minet_deinit();
 
     if (ok) {
-	return 0;
+      return 0;
     } else {
-	return -1;
+      return -1;
     }
 }
 
